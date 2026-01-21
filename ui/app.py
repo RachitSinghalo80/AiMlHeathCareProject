@@ -1,175 +1,286 @@
 from pathlib import Path
 import sys
+import tempfile
+from io import BytesIO
 
-# --- Ensure project root is on Python path ---
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
 import streamlit as st
 import yaml
 
+# -------- ML & Explainability --------
 from ml.predict import predict_risk
-from ml.explain import explain_prediction
+from ml.explain import (
+    explain_prediction,
+    shap_bar_plot,
+    group_shap_features,
+    top_modifiable_factors,
+    simulate_scenario
+)
+
+# -------- GenAI --------
 from genai.gemini_explainer import (
     configure_gemini,
     explain_for_doctor,
     explain_for_patient
 )
 
-# ---------- Configure Gemini (from environment variable) ----------
-configure_gemini()
-
-# ---------- Page Config ----------
-st.set_page_config(
-    page_title="Clinical Risk Insight Tool",
-    layout="wide"
+# -------- OCR --------
+from input.pdf_ocr import (
+    extract_text_from_pdf,
+    parse_medical_fields,
+    compute_data_quality
 )
 
+# -------- PDF Report --------
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+
+
+# ================= PDF REPORT =================
+def generate_pdf_report(risk_level, risk_score, shap_groups, clinical_summary):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("<b>Pre-Visit Clinical Risk Summary</b>", styles["Title"]))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph(f"<b>Risk Level:</b> {risk_level}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Risk Probability:</b> {risk_score:.1%}", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("<b>Key Risk Drivers</b>", styles["Heading2"]))
+    for group, items in shap_groups.items():
+        if items:
+            story.append(Paragraph(f"<b>{group}</b>", styles["Normal"]))
+            for name, value in items:
+                direction = "Increases risk" if value > 0 else "Reduces risk"
+                story.append(
+                    Paragraph(
+                        f"- {name.replace('_',' ').title()}: {direction}",
+                        styles["Normal"]
+                    )
+                )
+            story.append(Spacer(1, 6))
+
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("<b>Clinical Summary</b>", styles["Heading2"]))
+    story.append(Paragraph(clinical_summary.replace("\n", "<br/>"), styles["Normal"]))
+
+    story.append(Spacer(1, 12))
+    story.append(Paragraph(
+        "<i>This report is for screening and educational purposes only. "
+        "It does not provide diagnosis or treatment.</i>",
+        styles["Italic"]
+    ))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+# ================= APP SETUP =================
+configure_gemini()
+
+st.set_page_config(page_title="Clinical Risk Insight Tool", layout="wide")
 st.title("🩺 Clinical Risk Insight Tool")
 st.caption("Preventive Risk Assessment | ML + GenAI")
 
-# ---------- Load Risk Thresholds ----------
 with open("config/thresholds.yaml", "r") as f:
     thresholds = yaml.safe_load(f)
 
-# ---------- Session State Initialization ----------
-if "risk_score" not in st.session_state:
+# ================= SESSION STATE =================
+if "extracted_data" not in st.session_state:
+    st.session_state.extracted_data = None
+    st.session_state.data_quality = None
     st.session_state.risk_score = None
     st.session_state.shap_features = None
-    st.session_state.input_data = None
+    st.session_state.clinical_summary = None
 
-# ---------- View Mode ----------
-view_mode = st.radio(
-    "View Mode",
-    ["Doctor", "Patient"],
-    horizontal=True
-)
+left_col, right_col = st.columns([1, 1.4])
 
-# ---------- Input Form ----------
-st.subheader("Patient Information")
+# ================= LEFT PANEL =================
+with left_col:
+    view_mode = st.radio("View Mode", ["Doctor", "Patient"], horizontal=True)
 
-with st.form("patient_form"):
-    col1, col2, col3 = st.columns(3)
+    st.subheader("Upload Medical Report (PDF)")
+    st.caption("Beta OCR extraction. Please review extracted values.")
 
-    with col1:
-        age = st.number_input("Age", min_value=1, max_value=120)
-        bmi = st.number_input("BMI", min_value=10.0, max_value=60.0)
-        hba1c = st.number_input("HbA1c Level", min_value=3.0, max_value=15.0)
+    uploaded_pdf = st.file_uploader(
+        "Upload lab / medical report",
+        type=["pdf"]
+    )
 
-    with col2:
-        blood_glucose = st.number_input(
-            "Blood Glucose Level", min_value=50, max_value=300
+    if uploaded_pdf and st.button("Extract Health Data"):
+        with st.spinner("Extracting data from report..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(uploaded_pdf.read())
+                pdf_path = tmp.name
+
+            text = extract_text_from_pdf(pdf_path)
+            data = parse_medical_fields(text)
+            quality = compute_data_quality(data)
+
+            st.session_state.extracted_data = data
+            st.session_state.data_quality = quality
+            st.session_state.risk_score = None
+            st.session_state.shap_features = None
+            st.session_state.clinical_summary = None
+
+    if st.session_state.extracted_data:
+        st.markdown("---")
+        st.subheader("Patient Snapshot")
+
+        for k, v in st.session_state.extracted_data.items():
+            label = k.replace("_", " ").title()
+            if k == "blood_glucose_level" and v is not None:
+                st.write(f"**{label}**: {v} mg/dL (normalized)")
+            elif k == "HbA1c_level" and v is not None:
+                st.write(f"**{label}**: {v} %")
+            else:
+                st.write(f"**{label}**: {v if v is not None else 'Not found'}")
+
+        # ---- Data Quality Badge ----
+        dq = st.session_state.data_quality
+        if dq == "High":
+            st.success("Data Quality: High")
+        elif dq == "Medium":
+            st.warning("Data Quality: Medium")
+        else:
+            st.error("Data Quality: Low")
+            st.stop()
+
+        confirmed = st.checkbox(
+            "I confirm that the extracted values look correct"
         )
 
-        hypertension = st.selectbox(
-            "Hypertension (High Blood Pressure)",
-            ["No", "Yes"]
+        if not confirmed:
+            st.info("Please confirm extracted values before risk assessment.")
+            st.stop()
+
+        if st.button("Assess Risk"):
+            st.session_state.risk_score = predict_risk(
+                st.session_state.extracted_data
+            )
+            st.session_state.shap_features = explain_prediction(
+                st.session_state.extracted_data
+            )
+
+
+# ================= RIGHT PANEL =================
+with right_col:
+    if st.session_state.risk_score is not None:
+        risk = st.session_state.risk_score
+        shap_feats = st.session_state.shap_features
+
+        if risk < thresholds["low"]:
+            level, color, confidence = "LOW", "green", "High confidence (low risk)"
+        elif risk < thresholds["medium"]:
+            level, color, confidence = "MEDIUM", "orange", "Moderate confidence"
+        else:
+            level, color, confidence = "HIGH", "red", "High confidence (elevated risk)"
+
+        st.markdown(
+            f"<h2 style='color:{color}'>Risk Level: {level}</h2>",
+            unsafe_allow_html=True
         )
-        
+        st.metric("Estimated Risk Probability", f"{risk:.1%}")
+        st.caption(f"Model confidence: {confidence}")
+        st.progress(float(min(max(risk, 0.0), 1.0)))
 
-        heart_disease = st.selectbox(
-            "Heart Disease",
-            ["No", "Yes"]
-    )
-    
-
-    with col3:
-        gender = st.selectbox("Gender", ["Female", "Male", "Other"])
-        smoking = st.selectbox(
-            "Smoking History",
-            ["Never", "Former", "Current", "Ever", "Not current"]
-        )
-
-    submitted = st.form_submit_button("Assess Risk")
-
-# ---------- Inference ----------
-if submitted:
-    st.session_state.input_data = {
-        "age": age,
-        "bmi": bmi,
-        "HbA1c_level": hba1c,
-        "blood_glucose_level": blood_glucose,
-        "hypertension": 1 if hypertension == "Yes" else 0,
-        "heart_disease": 1 if heart_disease == "Yes" else 0,
-
-
-        # Gender one-hot
-        "gender_Male": 1 if gender == "Male" else 0,
-        "gender_Other": 1 if gender == "Other" else 0,
-
-        # Smoking history one-hot
-        "smoking_history_never": 1 if smoking == "never" else 0,
-        "smoking_history_former": 1 if smoking == "former" else 0,
-        "smoking_history_current": 1 if smoking == "current" else 0,
-        "smoking_history_ever": 1 if smoking == "ever" else 0,
-        "smoking_history_not current": 1 if smoking == "not current" else 0,
-    }
-
-    st.session_state.risk_score = predict_risk(
-        st.session_state.input_data
-    )
-    st.session_state.shap_features = explain_prediction(
-        st.session_state.input_data
-    )
-
-# ---------- Display Results ----------
-if st.session_state.risk_score is not None:
-    risk_score = st.session_state.risk_score
-    shap_features = st.session_state.shap_features
-
-    if risk_score < thresholds["low"]:
-        risk_level = "LOW"
-        color = "green"
-    elif risk_score < thresholds["medium"]:
-        risk_level = "MEDIUM"
-        color = "orange"
-    else:
-        risk_level = "HIGH"
-        color = "red"
-
-    st.markdown("---")
-    st.subheader("Risk Assessment Result")
-
-    st.markdown(
-        f"<h3 style='color:{color}'>Risk Level: {risk_level}</h3>",
-        unsafe_allow_html=True
-    )
-    st.metric("Risk Probability", f"{risk_score:.2%}")
-
-    # ---------- SHAP Explanation ----------
-    if view_mode == "Doctor":
+        st.markdown("---")
         st.subheader("Why this risk was predicted")
-        for name, value in shap_features:
-            st.write(f"- **{name}** → impact: `{value:.3f}`")
+        st.pyplot(shap_bar_plot(shap_feats))
 
-    # ---------- GenAI Explanation ----------
-    st.markdown("---")
-    st.subheader("Explanation")
+        st.markdown("---")
+        st.subheader("Risk Drivers (Grouped)")
+        grouped = group_shap_features(shap_feats)
+        for group, items in grouped.items():
+            if items:
+                st.markdown(f"**{group}**")
+                for n, v in items:
+                    arrow = "↑" if v > 0 else "↓"
+                    st.write(f"- {n.replace('_',' ').title()} {arrow}")
 
-    if st.button("Explain"):
-        with st.spinner("Generating explanation..."):
+        st.markdown("---")
+        st.subheader("Top Modifiable Factors")
+        for n, _ in top_modifiable_factors(shap_feats):
+            st.write(f"- {n.replace('_',' ').title()}")
+
+        st.markdown("---")
+        st.subheader("Scenario Explorer (Illustrative)")
+        base_data = st.session_state.extracted_data.copy()
+
+        scenario_feature = st.selectbox(
+            "Adjust factor",
+            ["BMI", "Blood Glucose"]
+        )
+
+        simulated = None
+        if scenario_feature == "BMI" and base_data.get("bmi") is not None:
+            new_val = st.slider(
+                "Simulated BMI",
+                10.0, 60.0, float(base_data["bmi"])
+            )
+            simulated = simulate_scenario(base_data, "bmi", new_val)
+
+        elif scenario_feature == "Blood Glucose" and base_data.get("blood_glucose_level") is not None:
+            new_val = st.slider(
+                "Simulated Blood Glucose (mg/dL)",
+                50, 300, int(base_data["blood_glucose_level"])
+            )
+            simulated = simulate_scenario(
+                base_data, "blood_glucose_level", new_val
+            )
+
+        if simulated:
+            sim_risk = predict_risk(simulated)
+            st.write(f"Simulated Risk: **{sim_risk:.1%}**")
+
+        st.markdown("---")
+        st.subheader("Clinical Summary")
+        if st.button("Generate Clinical Summary"):
             if view_mode == "Doctor":
-                explanation = explain_for_doctor(
-                    st.session_state.risk_score,
-                    st.session_state.shap_features
+                st.session_state.clinical_summary = explain_for_doctor(
+                    risk, shap_feats
                 )
             else:
-                explanation = explain_for_patient(
-                    st.session_state.risk_score,
-                    st.session_state.shap_features
+                st.session_state.clinical_summary = explain_for_patient(
+                    risk, shap_feats
                 )
 
-        st.write(explanation)
+        if st.session_state.clinical_summary:
+            st.write(st.session_state.clinical_summary)
 
-    # ---------- Disclaimer ----------
-    st.markdown("---")
-    st.caption(
-        "⚠️ This tool is for screening and educational purposes only. "
-        "It does not provide a medical diagnosis or treatment."
-    )
+        st.markdown("---")
+        if st.button("Download Pre-Visit Report (PDF)"):
+            if not st.session_state.clinical_summary:
+                st.session_state.clinical_summary = (
+                    explain_for_doctor(risk, shap_feats)
+                    if view_mode == "Doctor"
+                    else explain_for_patient(risk, shap_feats)
+                )
 
-    # ---------- Reset ----------
-    st.markdown("---")
-    if st.button("Reset"):
-        st.session_state.risk_score = None
-        st.session_state.shap_features = None
+            pdf_buffer = generate_pdf_report(
+                risk_level=level,
+                risk_score=risk,
+                shap_groups=grouped,
+                clinical_summary=st.session_state.clinical_summary
+            )
+
+            st.download_button(
+                label="Click to download PDF",
+                data=pdf_buffer,
+                file_name="pre_visit_risk_summary.pdf",
+                mime="application/pdf"
+            )
+
+        st.markdown("---")
+        st.caption(
+            "⚠️ Screening & educational use only. "
+            "Not a diagnostic or treatment tool."
+        )
