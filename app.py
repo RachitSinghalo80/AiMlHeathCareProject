@@ -8,6 +8,12 @@ ROOT_DIR = Path(__file__).resolve().parent
 
 # Import from input module
 from input.pdf_reader import extract_text_from_pdf, parse_medical_fields, compute_data_quality
+from genai.report_chat import chat_with_report, summarize_report
+from genai.drug_info import get_drug_info
+from genai.gemini_explainer import configure_gemini
+
+# Configure Gemini API
+configure_gemini()
 
 # Flask app setup
 app = Flask(__name__)
@@ -34,8 +40,11 @@ def index():
     return jsonify({
         "message": "Clinical Risk Insight Tool API",
         "endpoints": {
-            "upload": "/api/upload (POST)",
-            "analyze": "/api/analyze (POST)"
+            "upload": "/api/upload (POST) - Upload PDF and extract data",
+            "analyze": "/api/analyze (POST) - Analyze health risk from extracted data",
+            "chat": "/api/chat (POST) - Chat with AI about the uploaded report",
+            "summarize": "/api/summarize (POST) - Get AI summary of the uploaded report",
+            "drug_info": "/api/drug-info (POST) - Get drug information from OpenFDA"
         }
     })
 
@@ -126,6 +135,77 @@ def analyze_risk():
         
     except Exception as e:
         return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
+
+
+# ================= REPORT CHAT =================
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Chat with AI about the uploaded medical report"""
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '')
+        filename = session.get('pdf_filename', '')
+
+        if not filename:
+            return jsonify({"error": "No PDF loaded. Please upload a PDF first."}), 400
+        
+        text_path = os.path.join(app.config['UPLOAD_FOLDER'], filename + ".txt")
+        if not os.path.exists(text_path):
+            return jsonify({"error": "Extracted text not found. Please re-upload the PDF."}), 400
+        
+        with open(text_path, "r", encoding="utf-8") as f:
+            pdf_text = f.read()
+
+        response = chat_with_report(pdf_text, user_message)
+        return jsonify({"response": response, "is_html": True})
+        
+    except Exception as e:
+        return jsonify({"error": f"Chat failed: {str(e)}"}), 500
+
+
+@app.route('/api/summarize', methods=['POST'])
+def summarize():
+    """Generate a summary of the uploaded medical report"""
+    try:
+        filename = session.get('pdf_filename', '')
+
+        if not filename:
+            return jsonify({"error": "No PDF loaded. Please upload a PDF first."}), 400
+        
+        text_path = os.path.join(app.config['UPLOAD_FOLDER'], filename + ".txt")
+        if not os.path.exists(text_path):
+            return jsonify({"error": "Extracted text not found. Please re-upload the PDF."}), 400
+        
+        with open(text_path, "r", encoding="utf-8") as f:
+            pdf_text = f.read()
+
+        response = summarize_report(pdf_text)
+        return jsonify({"response": response, "is_html": True})
+        
+    except Exception as e:
+        return jsonify({"error": f"Summarization failed: {str(e)}"}), 500
+
+
+# ================= DRUG INFO =================
+@app.route('/api/drug-info', methods=['POST'])
+def drug_info():
+    """Get drug information from OpenFDA and AI"""
+    try:
+        data = request.get_json()
+        drug_name = data.get('drugName', '').strip()
+        
+        if not drug_name:
+            return jsonify({"error": "Drug name is required!"}), 400
+        
+        result = get_drug_info(drug_name)
+        
+        if "error" in result:
+            return jsonify(result), 400
+            
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": f"Drug info failed: {str(e)}"}), 500
 
 
 if __name__ == '__main__':

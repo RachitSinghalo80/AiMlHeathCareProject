@@ -6,3 +6,7 @@ streamlit
 google-generativeai
 pyyaml
 joblib
+flask
+PyPDF2
+python-dotenv
+requests

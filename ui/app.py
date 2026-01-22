@@ -24,6 +24,8 @@ from genai.gemini_explainer import (
     explain_for_doctor,
     explain_for_patient
 )
+from genai.drug_info import get_drug_info
+from genai.drug_recommendations import get_drug_recommendations_section
 
 # -------- PDF Reader --------
 from input.pdf_reader import (
@@ -236,6 +238,66 @@ with right_col:
         for n, _ in top_modifiable_factors(shap_feats):
             st.write(f"- {n.replace('_',' ').title()}")
 
+        # ================= DRUG RECOMMENDATIONS =================
+        st.markdown("---")
+        st.subheader("💊 Drug Recommendations")
+        st.caption("Based on identified risk factors (consult healthcare provider)")
+        
+        if "drug_recommendations" not in st.session_state:
+            st.session_state.drug_recommendations = None
+        
+        if st.button("Generate Drug Recommendations"):
+            with st.spinner("Analyzing risk factors and fetching drug information..."):
+                recommendations = get_drug_recommendations_section(
+                    st.session_state.extracted_data,
+                    risk,
+                    shap_feats
+                )
+                st.session_state.drug_recommendations = recommendations
+        
+        if st.session_state.drug_recommendations:
+            recs = st.session_state.drug_recommendations
+            
+            if not recs.get("has_recommendations"):
+                st.info(recs.get("message", "No recommendations available"))
+            else:
+                st.warning(f"⚠️ {recs.get('disclaimer', '')}")
+                
+                for drug in recs.get("drugs", []):
+                    with st.expander(f"📋 {drug.get('name', 'Unknown').title()}", expanded=False):
+                        if drug.get("found"):
+                            brands = ", ".join(drug.get("brand_names", ["N/A"]))
+                            
+                            st.markdown(f"**Brand Names:** {brands}")
+                            st.markdown(f"**Manufacturer:** {drug.get('manufacturer', 'N/A')}")
+                            
+                            st.markdown("---")
+                            st.markdown("**Purpose / Indications:**")
+                            st.write(drug.get("purpose", "Not available")[:400])
+                            
+                            st.markdown("---")
+                            st.markdown("**Dosage:**")
+                            st.write(drug.get("dosage", "Consult doctor")[:250])
+                            
+                            st.markdown("---")
+                            st.markdown("**⚠️ Warnings:**")
+                            st.write(drug.get("warnings", "See prescribing information")[:300])
+                            
+                            st.markdown("---")
+                            st.markdown("**Side Effects:**")
+                            st.write(drug.get("side_effects", "Consult healthcare provider")[:300])
+                            
+                            st.markdown("---")
+                            st.markdown("**Contraindications:**")
+                            st.write(drug.get("contraindications", "See prescribing information")[:250])
+                            
+                            st.markdown("---")
+                            st.markdown("**Drug Interactions:**")
+                            st.write(drug.get("drug_interactions", "Consult pharmacist")[:250])
+                        else:
+                            st.info("Detailed FDA information not available for this drug.")
+
+
         st.markdown("---")
         st.subheader("Scenario Explorer (Illustrative)")
         base_data = st.session_state.extracted_data.copy()
@@ -308,4 +370,41 @@ with right_col:
         st.caption(
             "⚠️ Screening & educational use only. "
             "Not a diagnostic or treatment tool."
+        )
+
+# ================= DRUG INFO SECTION =================
+st.markdown("---")
+st.subheader("💊 Drug Information Lookup")
+st.caption("Search for drug information using name, brand, or condition")
+
+# Initialize session state for drug info
+if "drug_info_result" not in st.session_state:
+    st.session_state.drug_info_result = None
+
+drug_query = st.text_input(
+    "Enter drug name, brand name, or condition",
+    placeholder="e.g., Metformin, Crocin, headache, high blood pressure"
+)
+
+if st.button("🔍 Search Drug Info"):
+    if drug_query:
+        with st.spinner("Fetching drug information..."):
+            result = get_drug_info(drug_query)
+            st.session_state.drug_info_result = result
+    else:
+        st.warning("Please enter a drug name or condition")
+
+if st.session_state.drug_info_result:
+    result = st.session_state.drug_info_result
+    if "error" in result:
+        st.error(result["error"])
+    else:
+        st.success(f"✅ Found information for: **{result.get('drug_name', drug_query)}**")
+        st.markdown("---")
+        st.write(result.get("data", "No information available"))
+        
+        st.markdown("---")
+        st.caption(
+            "⚠️ Drug information is for educational purposes only. "
+            "Always consult a healthcare professional before taking any medication."
         )
