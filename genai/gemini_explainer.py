@@ -1,6 +1,11 @@
 import google.generativeai as genai
-
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file from project root
+ROOT_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT_DIR / ".env")
 
 
 def configure_gemini():

@@ -1,6 +1,5 @@
 from pathlib import Path
 import sys
-import tempfile
 from io import BytesIO
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -26,8 +25,8 @@ from genai.gemini_explainer import (
     explain_for_patient
 )
 
-# -------- OCR --------
-from input.pdf_ocr import (
+# -------- PDF Reader --------
+from input.pdf_reader import (
     extract_text_from_pdf,
     parse_medical_fields,
     compute_data_quality
@@ -108,7 +107,11 @@ with left_col:
     view_mode = st.radio("View Mode", ["Doctor", "Patient"], horizontal=True)
 
     st.subheader("Upload Medical Report (PDF)")
-    st.caption("Beta OCR extraction. Please review extracted values.")
+    st.caption("PDF text extraction. Please review extracted values.")
+
+    # Create uploads folder
+    UPLOAD_FOLDER = ROOT_DIR / "uploads"
+    UPLOAD_FOLDER.mkdir(exist_ok=True)
 
     uploaded_pdf = st.file_uploader(
         "Upload lab / medical report",
@@ -117,13 +120,35 @@ with left_col:
 
     if uploaded_pdf and st.button("Extract Health Data"):
         with st.spinner("Extracting data from report..."):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(uploaded_pdf.read())
-                pdf_path = tmp.name
-
-            text = extract_text_from_pdf(pdf_path)
+            # Save uploaded PDF
+            from werkzeug.utils import secure_filename
+            filename = secure_filename(uploaded_pdf.name)
+            filepath = UPLOAD_FOLDER / filename
+            
+            with open(filepath, "wb") as f:
+                f.write(uploaded_pdf.getbuffer())
+            
+            # Extract text from PDF
+            text = extract_text_from_pdf(str(filepath))
+            
+            # Check for extraction errors
+            if text.startswith("Error reading PDF"):
+                st.error(text)
+                st.stop()
+            
+            # Save extracted text
+            text_path = UPLOAD_FOLDER / (filename + ".txt")
+            with open(text_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            
+            # Store filename in session
+            st.session_state.pdf_filename = filename
+            
+            # Parse medical fields
             data = parse_medical_fields(text)
             quality = compute_data_quality(data)
+            
+            st.success(f"✅ PDF uploaded: {filename} ({len(text)} chars extracted)")
 
             st.session_state.extracted_data = data
             st.session_state.data_quality = quality

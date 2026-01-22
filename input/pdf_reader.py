@@ -1,20 +1,22 @@
 import re
-from pdf2image import convert_from_path
-import pytesseract
-from PIL import Image
+from PyPDF2 import PdfReader
 
 
-# ---------- OCR ----------
+# ---------- PDF Text Extraction ----------
 def extract_text_from_pdf(pdf_path: str) -> str:
-    images = convert_from_path(pdf_path, dpi=300)
-    full_text = []
-
-    for img in images:
-        gray = img.convert("L")  # grayscale improves OCR
-        text = pytesseract.image_to_string(gray)
-        full_text.append(text)
-
-    return "\n".join(full_text)
+    """Extract text from PDF using PyPDF2 (works for text-based PDFs)"""
+    try:
+        reader = PdfReader(pdf_path)
+        full_text = []
+        
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                full_text.append(text)
+        
+        return "\n".join(full_text)
+    except Exception as e:
+        return f"Error reading PDF: {str(e)}"
 
 
 # ---------- Structured Medical Extraction ----------
@@ -64,7 +66,7 @@ def parse_medical_fields(text: str) -> dict:
         # Convert mmol/L → mg/dL
         data["blood_glucose_level"] = round(float(m_mmol.group(2)) * 18.0, 1)
 
-    # ---------- HYPERTENSION (OCR-SAFE NEGATION) ----------
+    # ---------- HYPERTENSION ----------
     if re.search(r"hypertension\s*[:\-]?\s*no", text_lower):
         data["hypertension"] = False
     elif re.search(r"\bno\s+hypertension\b|\bnormotensive\b", text_lower):
@@ -73,7 +75,7 @@ def parse_medical_fields(text: str) -> dict:
         data["hypertension"] = True
 
 
-# ---------- HEART DISEASE (OCR-SAFE NEGATION) ----------
+    # ---------- HEART DISEASE ----------
     if re.search(r"heart disease\s*[:\-]?\s*no", text_lower):
         data["heart_disease"] = False
     elif re.search(r"\bno\s+heart disease\b|\bnormal heart\b", text_lower):
