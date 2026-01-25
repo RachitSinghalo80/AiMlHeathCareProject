@@ -17,11 +17,50 @@ def _load():
         _explainer = shap.TreeExplainer(_model)
         _feature_order = _model.feature_names_in_
 
+# ---------- Helper function  ----------   
+def _sanitize_input(input_data: dict) -> dict:
+    """
+    Ensure all model features are numeric before SHAP.
+    Handles OCR strings, units, booleans safely.
+    """
+    clean = {}
+
+    for key in _feature_order:
+        val = input_data.get(key, 0)
+
+        if val is None:
+            clean[key] = 0.0
+            continue
+
+        if isinstance(val, bool):
+            clean[key] = int(val)
+            continue
+
+        if isinstance(val, str):
+            val = (
+                val.lower()
+                   .replace("%", "")
+                   .replace("mg/dl", "")
+                   .replace("mg/dL", "")
+                   .replace(",", ".")
+                   .strip()
+            )
+
+        try:
+            clean[key] = float(val)
+        except ValueError:
+            clean[key] = 0.0
+
+    return clean
+     
+
 # ---------- SHAP values for one prediction ----------
 def explain_prediction(input_data: dict, top_k: int = 8):
     _load()
-    df = pd.DataFrame([input_data])
+    clean_input = _sanitize_input(input_data)
+    df = pd.DataFrame([clean_input])
     df = df.reindex(columns=_feature_order, fill_value=0)
+
 
     shap_values = _explainer.shap_values(df)[0]
     features = list(zip(df.columns, shap_values))
@@ -55,7 +94,14 @@ def group_shap_features(shap_features):
         if name in ["bmi", "HbA1c_level", "blood_glucose_level"]:
             groups["Metabolic Factors"].append((name, value))
         elif name.startswith("smoking"):
-            groups["Lifestyle Factors"].append((name, value))
+        # Only show if smoking INCREASES risk
+            if value > 0:
+                groups["Lifestyle Factors"].append((name, value))
+
+        elif name.startswith("gender"):
+    # ❌ Do not include gender in risk drivers
+            continue
+
         else:
             groups["Medical History"].append((name, value))
 

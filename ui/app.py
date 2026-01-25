@@ -2,6 +2,15 @@ from pathlib import Path
 import sys
 from io import BytesIO
 
+#---------Animation------------------
+from streamlit_lottie import st_lottie
+import json
+
+#-----------Lottie Helper Function---------- 
+def load_lottie(path):
+    with open(path, "r") as f:
+        return json.load(f)
+ 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
@@ -88,6 +97,60 @@ def generate_pdf_report(risk_level, risk_score, shap_groups, clinical_summary):
 configure_gemini()
 
 st.set_page_config(page_title="Clinical Risk Insight Tool", layout="wide")
+st.markdown(
+    """
+    <style>
+    /* ---- Global font tightening ---- */
+    html, body, [class*="css"]  {
+        font-size: 15px;
+        line-height: 1.45;
+    }
+
+    /* ---- Section headers ---- */
+    h2, h3 {
+        margin-bottom: 0.4rem;
+    }
+
+    /* ---- Subheaders (e.g., Risk Drivers, Top Modifiable Factors) ---- */
+    .block-container h3 {
+        margin-top: 1.2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    /* ---- Reduce space between bullet items ---- */
+    ul {
+        padding-left: 1.2rem;
+        margin-top: 0.2rem;
+        margin-bottom: 0.4rem;
+    }
+
+    li {
+        margin-bottom: 0.2rem;
+    }
+
+    /* ---- Reduce spacing between Streamlit blocks ---- */
+    .element-container {
+        margin-bottom: 0.6rem;
+    }
+
+    /* ---- Tighten captions ---- */
+    .stCaption {
+        margin-top: 0.1rem;
+        margin-bottom: 0.3rem;
+        font-size: 0.85rem;
+        color: #9aa0a6;
+    }
+
+    /* ---- Buttons slightly tighter ---- */
+    button {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.9rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 st.title("🩺 Clinical Risk Insight Tool")
 st.caption("Preventive Risk Assessment | ML + GenAI")
 
@@ -159,7 +222,7 @@ with left_col:
             st.session_state.clinical_summary = None
 
     if st.session_state.extracted_data:
-        st.markdown("---")
+        
         st.subheader("Patient Snapshot")
 
         for k, v in st.session_state.extracted_data.items():
@@ -218,25 +281,80 @@ with right_col:
         st.metric("Estimated Risk Probability", f"{risk:.1%}")
         st.caption(f"Model confidence: {confidence}")
         st.progress(float(min(max(risk, 0.0), 1.0)))
-
-        st.markdown("---")
+        
+            
         st.subheader("Why this risk was predicted")
         st.pyplot(shap_bar_plot(shap_feats))
 
+# ================= Full width result =================    
+if st.session_state.risk_score is not None:
         st.markdown("---")
         st.subheader("Risk Drivers (Grouped)")
-        grouped = group_shap_features(shap_feats)
-        for group, items in grouped.items():
-            if items:
-                st.markdown(f"**{group}**")
-                for n, v in items:
-                    arrow = "↑" if v > 0 else "↓"
-                    st.write(f"- {n.replace('_',' ').title()} {arrow}")
 
+        left_risk, right_shap = st.columns([1.1, 1])
+
+    # -------- LEFT: Grouped Risk Drivers (Text) --------
+        with left_risk:
+            grouped = group_shap_features(shap_feats)
+            for group, items in grouped.items():
+                if items:
+                    st.markdown(f"**{group}**")
+                    for n, v in items:
+                        arrow = "↑" if v > 0 else "↓"
+                        st.write(f"- {n.replace('_',' ').title()} {arrow}")
+            st.caption(
+            "How to read this section:\n"
+            "• ↑ indicates a factor increasing estimated risk\n"
+            "• ↓ indicates a factor reducing estimated risk\n"
+            "• Some factors are non-modifiable (e.g., medical history)\n"
+            "• Focus on the 'Top Modifiable Factors' section for actionable insight"
+            )
+
+        with right_shap:
+            st.caption("Metabolic Risk Overview")
+            lottie = load_lottie("assets/diabetes_metabolism.json")
+            st_lottie(lottie, height=420, loop=True)
+ 
+
+# ---------- Top Modifiable + Scenario Explorer (ONE UNIT) ----------
         st.markdown("---")
         st.subheader("Top Modifiable Factors")
+
         for n, _ in top_modifiable_factors(shap_feats):
             st.write(f"- {n.replace('_',' ').title()}")
+
+        st.caption("What-if Scenario Explorer (Illustrative)")
+
+        base_data = st.session_state.extracted_data.copy()
+
+        scenario_feature = st.selectbox(
+            "Adjust factor",
+            ["BMI", "Blood Glucose"],
+            key="scenario_factor"
+        )
+
+        if scenario_feature == "BMI" and base_data.get("bmi") is not None:
+            new_val = st.slider(
+            "Simulated BMI",
+            10.0, 60.0, float(base_data["bmi"]),
+            key="bmi_slider"
+        )
+            simulated = simulate_scenario(base_data, "bmi", new_val)
+
+        elif scenario_feature == "Blood Glucose" and base_data.get("blood_glucose_level") is not None:
+            new_val = st.slider(
+            "Simulated Blood Glucose (mg/dL)",
+            50, 300, int(base_data["blood_glucose_level"]),
+            key="glucose_slider"
+        )
+            simulated = simulate_scenario(
+            base_data, "blood_glucose_level", new_val
+        )
+
+        if simulated:
+            sim_risk = predict_risk(simulated)
+            st.write(f"Simulated Risk: **{sim_risk:.1%}**")
+
 
         # ================= DRUG RECOMMENDATIONS =================
         st.markdown("---")
@@ -297,38 +415,8 @@ with right_col:
                         else:
                             st.info("Detailed FDA information not available for this drug.")
 
-
         st.markdown("---")
-        st.subheader("Scenario Explorer (Illustrative)")
-        base_data = st.session_state.extracted_data.copy()
-
-        scenario_feature = st.selectbox(
-            "Adjust factor",
-            ["BMI", "Blood Glucose"]
-        )
-
-        simulated = None
-        if scenario_feature == "BMI" and base_data.get("bmi") is not None:
-            new_val = st.slider(
-                "Simulated BMI",
-                10.0, 60.0, float(base_data["bmi"])
-            )
-            simulated = simulate_scenario(base_data, "bmi", new_val)
-
-        elif scenario_feature == "Blood Glucose" and base_data.get("blood_glucose_level") is not None:
-            new_val = st.slider(
-                "Simulated Blood Glucose (mg/dL)",
-                50, 300, int(base_data["blood_glucose_level"])
-            )
-            simulated = simulate_scenario(
-                base_data, "blood_glucose_level", new_val
-            )
-
-        if simulated:
-            sim_risk = predict_risk(simulated)
-            st.write(f"Simulated Risk: **{sim_risk:.1%}**")
-
-        st.markdown("---")
+        
         st.subheader("Clinical Summary")
         if st.button("Generate Clinical Summary"):
             if view_mode == "Doctor":

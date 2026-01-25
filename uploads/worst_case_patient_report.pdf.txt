@@ -1,0 +1,23 @@
+Pre-Visit Clinical Risk Summary
+ 
+Patient Profile
+Age: 58 years
+BMI: 34.8 (Obese)
+HbA1c Level: 9.2 % (Very High)
+Blood Glucose Level: 265 mg/dL (Severely Elevated)
+Hypertension: Yes
+Heart Disease: Yes
+Risk Assessment
+Risk Level: HIGH
+Estimated Risk Probability: 92%
+Key Risk Drivers
+- Very high HbA1c and blood glucose levels
+- Obesity (BMI > 30)
+- Existing hypertension and cardiovascular disease
+Clinical Summary
+This patient shows a critically elevated risk profile for diabetes-related complications. Persistently
+high glycemic markers combined with obesity and cardiovascular comorbidities suggest a high
+likelihood of disease progression without timely intervention. Close clinical monitoring, confirmatory
+diagnostics, and structured lifestyle and medical management should be prioritized.
+This report is generated for educational and screening purposes only. It does not constitute a
+medical diagnosis or treatment recommendation.

@@ -43,7 +43,10 @@ def parse_medical_fields(text: str) -> dict:
         data["bmi"] = float(m.group(1))
 
     # ---------- HbA1c ----------
-    m = re.search(r"hba1c\s*[:\-]?\s*(\d+\.?\d*)\s*%?", text_lower)
+    m = re.search(
+    r"hba1c(?:\s*level)?\s*[:\-]?\s*(\d+\.?\d*)",
+    text_lower
+    )
     if m:
         data["HbA1c_level"] = float(m.group(1))
 

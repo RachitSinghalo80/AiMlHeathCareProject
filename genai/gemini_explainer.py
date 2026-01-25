@@ -119,7 +119,7 @@ def explain_for_doctor(risk_score: float, shap_features: list):
     model = genai.GenerativeModel(
     "gemini-2.5-flash",
     generation_config={
-        "max_output_tokens": 5000,   # 👈 controls length
+        "max_output_tokens": 4000,   # 👈 controls length
         "temperature": 0.3,         # 👈 reduces verbosity
         "top_p": 0.9
     }
@@ -184,7 +184,7 @@ Rules:
     model = genai.GenerativeModel(
     "gemini-2.5-flash",
     generation_config={
-        "max_output_tokens": 5000,   # 👈 controls length
+        "max_output_tokens": 4000,   # 👈 controls length
         "temperature": 0.3,         # 👈 reduces verbosity
         "top_p": 0.9
     }
