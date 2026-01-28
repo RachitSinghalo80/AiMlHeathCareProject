@@ -88,6 +88,82 @@ def generate_pdf_report(risk_level, risk_score, shap_groups, clinical_summary):
 configure_gemini()
 
 st.set_page_config(page_title="Clinical Risk Insight Tool", layout="wide")
+
+# ================= CUSTOM STYLING =================
+st.markdown("""
+    <style>
+    /* Import a modern font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Remove default Streamlit Pink/Purple and replace with Teal/Blue */
+    :root {
+        --primary-color: #0e7490; /* Cyan-700 */
+        --background-color: #ffffff;
+        --secondary-background-color: #f0f9ff; /* Sky-50 */
+        --text-color: #0f172a;
+        --font: "Inter", sans-serif;
+    }
+    
+    /* Primary buttons */
+    .stButton > button {
+        background-color: #0e7490;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+    }
+    .stButton > button:hover {
+        background-color: #155e75;
+        border-color: #155e75;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Text inputs and selects focus borders */
+    .stTextInput > div > div > input:focus, 
+    .stSelectbox > div > div > div:focus, 
+    .stNumberInput > div > div > input:focus {
+        border-color: #0e7490;
+        box-shadow: 0 0 0 1px #0e7490;
+    }
+
+    /* Radio buttons and checkboxes selected state */
+    div[role="radiogroup"] > label > div:first-child {
+        background-color: #0e7490 !important;
+        border-color: #0e7490 !important;
+    }
+
+    /* Titles */
+    h1, h2, h3 {
+        color: #0f172a;
+    }
+    
+    h1 {
+        background: linear-gradient(to right, #0e7490, #06b6d4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Enhance expanders */
+    .streamlit-expanderHeader {
+        background-color: #f8fafc;
+        border-radius: 8px;
+    }
+    
+    /* Hide default menu */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("🩺 Clinical Risk Insight Tool")
 st.caption("Preventive Risk Assessment | ML + GenAI")
 
