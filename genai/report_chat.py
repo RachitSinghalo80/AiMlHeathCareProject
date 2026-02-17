@@ -20,7 +20,7 @@ if api_key:
 def get_report_model():
     """Get Gemini model configured for report analysis"""
     return genai.GenerativeModel(
-        "gemini-2.0-flash",
+        "gemini-2.5-flash",
         generation_config={
             "temperature": 1.0,
             "top_p": 0.9,

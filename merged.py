@@ -8,6 +8,9 @@ import webbrowser
 import json 
 import random
 import requests
+import dotenv
+
+dotenv.load_dotenv()
 
 app = Flask(__name__)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +22,10 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
 ALLOWED_EXTENSIONS = {'pdf'}
 app.secret_key = "nullisgreat"   
 
-genai.configure(api_key="AIzaSyD9c5s3ecOwNTwgRqZSCxWj3pCKfrSH2xY")
+api_keey = os.getenv("GEMINI_API_KEY")
+
+
+genai.configure(api_key=api_keey)
 
 # report model 
 model1 = genai.GenerativeModel("models/gemini-flash-lite-latest", generation_config={

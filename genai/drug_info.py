@@ -21,7 +21,7 @@ if api_key:
 def get_drug_model():
     """Get Gemini model configured for drug information"""
     return genai.GenerativeModel(
-        "gemini-2.0-flash",
+        "gemini-2.5-flash-lite",
         generation_config={
             "temperature": 0.7,
             "top_p": 0.8,
