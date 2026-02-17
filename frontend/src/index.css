@@ -5,11 +5,20 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-background text-foreground font-body antialiased selection:bg-tertiary selection:text-foreground;
+  html {
+    scroll-behavior: smooth;
   }
-  
-  h1, h2, h3, h4, h5, h6 {
+
+  body {
+    @apply bg-background text-foreground font-body antialiased selection:bg-tertiary selection:text-foreground overflow-x-hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-heading font-bold text-foreground;
   }
 }

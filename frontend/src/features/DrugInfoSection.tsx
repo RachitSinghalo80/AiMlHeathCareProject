@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { DrugInfoResult, DrugRecommendation, RiskAnalysis, ExtractedData } from '../types';
+import type { DrugInfoResult, DrugRecommendation, RiskAnalysis, ExtractedData } from '../types';
 import axios from 'axios';
 import { Pill, Search, Info } from 'lucide-react';
 
@@ -92,7 +92,7 @@ export const DrugInfoSection: React.FC<DrugInfoSectionProps> = ({ riskAnalysis, 
                 </div>
 
                 {/* Recommendations Column */}
-                <div className="space-y-6 relative">
+                <div className="space-y-6 relative animate-fadeIn">
                     <Card variant="featured" className="p-6 h-full border-dashed bg-blue-50/50">
                         <div className="flex justify-between items-start mb-6">
                             <div>
@@ -132,6 +132,13 @@ export const DrugInfoSection: React.FC<DrugInfoSectionProps> = ({ riskAnalysis, 
                                 <p className="text-xs text-center text-muted-foreground mt-4 font-medium opacity-70">
                                     ⚠️ Disclaimer: {recommendations.disclaimer || "Consult a healthcare professional."}
                                 </p>
+                            </div>
+                        )}
+
+                        {!riskAnalysis && (
+                            <div className="flex flex-col items-center justify-center h-48 text-slate-400">
+                                <Info size={48} className="mb-4 opacity-20" />
+                                <p className="text-sm font-medium">Complete risk assessment to unlock recommendations.</p>
                             </div>
                         )}
                     </Card>

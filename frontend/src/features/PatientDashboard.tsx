@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { ExtractedData, RiskAnalysis } from '../types';
+import type { ExtractedData, RiskAnalysis } from '../types';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import { ClinicalSummary } from './ClinicalSummary';
 
 interface PatientDashboardProps {
     data: ExtractedData;
@@ -21,9 +22,10 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ data, onRisk
         try {
             const res = await axios.post('/api/predict', { data });
             onRiskCalculated(res.data);
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            alert("Failed to calculate risk");
+            const msg = err.response?.data?.error || "Failed to calculate risk";
+            alert(`Error: ${msg}`);
         } finally {
             setLoading(false);
         }
@@ -65,7 +67,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ data, onRisk
                         })}
                     </div>
 
-                    {!confirmed && !riskAnalysis && (
+                    {!riskAnalysis && (
                         <div className="mt-6">
                             <label className="flex items-center gap-3 cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
                                 <input type="checkbox" className="w-5 h-5 accent-accent" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
@@ -146,9 +148,9 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ data, onRisk
                                                 {value > 0 ? "Increases Risk" : "Reduces Risk"}
                                             </span>
                                         </div>
-                                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                        <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden shadow-inner">
                                             <div
-                                                className={`h-full ${getBarColor(value)}`}
+                                                className={`h-full rounded-full shadow-sm transition-all duration-500 ${value > 0 ? 'bg-gradient-to-r from-red-400 to-red-500' : 'bg-gradient-to-r from-emerald-400 to-emerald-500'}`}
                                                 style={{ width: `${Math.min(Math.abs(value) * 100, 100)}%` }} // scaling for visuals
                                             />
                                         </div>
@@ -178,6 +180,8 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ data, onRisk
                             </div>
                         </Card>
                     </div>
+
+                    <ClinicalSummary riskAnalysis={riskAnalysis} data={data} />
                 </motion.div>
             )}
         </section>

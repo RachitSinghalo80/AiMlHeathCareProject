@@ -14,6 +14,23 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
 import yaml
+import numpy as np
+
+def convert_numpy_types(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(i) for i in obj]
+    elif isinstance(obj, tuple):
+        return [convert_numpy_types(i) for i in obj]
+    else:
+        return obj
 
 # Import existing modules
 from ml.predict import predict_risk
@@ -148,14 +165,14 @@ def predict():
         else:
             level = "HIGH"
             
-        return jsonify({
+        return jsonify(convert_numpy_types({
             'risk_score': float(risk_score),
             'risk_level': level,
             'shap_values': shap_values, 
             # Helper for frontend: pre-calculate top factors
             'top_factors': top_modifiable_factors(shap_values),
             'grouped_features': group_shap_features(shap_values)
-        })
+        }))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

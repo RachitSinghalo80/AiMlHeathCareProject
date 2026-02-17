@@ -2,7 +2,7 @@ import React from 'react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return (
-        <div className="min-h-screen bg-background text-foreground font-body overflow-x-hidden relative">
+        <div className="min-h-screen bg-background text-foreground font-body relative">
             {/* Background Decor */}
             <div className="absolute inset-0 bg-dot-pattern opacity-40 pointer-events-none" />
 
