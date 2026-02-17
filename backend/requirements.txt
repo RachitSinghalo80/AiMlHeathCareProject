@@ -1,0 +1,14 @@
+flask
+flask-cors
+werkzeug
+reportlab
+PyPDF2
+google-generativeai
+python-dotenv
+pandas
+xgboost
+shap
+scikit-learn
+requests
+pyyaml
+matplotlib
